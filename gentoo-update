@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+echo "Upgrading Gentoo..."
+echo "Syncing portage..."
+eix-sync
+echo
+echo "Updating layman repos..."
+layman -S
+echo
+echo "Cleaning any prior emerge resume history"
+emaint --fix cleanresume
+echo
+echo "Updating portage..."
+emerge --oneshot --update portage
+echo
+echo "Running a complete system upgrade..."
+START=`date`
+emerge --deep --with-bdeps=y --changed-use --update @world
+STOP=`date`
+echo "Start : "$START
+echo "End   : "$STOP
+echo
+echo "Cleaning up dependencies..."
+emerge --depclean
+echo
+echo "Checking and rebuilding dependencies..."
+revdep-rebuild
+echo
+echo "Rebuilding any packages that depend on stale libraries..."
+emerge @preserved-rebuild
+echo
+echo "Rebuilding any external kernel modules (example virtualbox or vmware)"
+emerge @module-rebuild --exclude '*-bin'
+echo
+echo "Updating environmental settings"
+env-update
+echo
+echo "Upgrade completed"
+read -r -p "Reboot? [Y/n] " input
+ 
+case $input in
+    [yY][eE][sS]|[yY])
+ echo "Rebooting"
+ reboot
+ ;;
+    [nN][oO]|[nN])
+       ;;
+    *)
+ echo "Invalid input..."
+ exit 1
+ ;;
+esac
