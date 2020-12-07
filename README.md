@@ -1,2 +1,2 @@
-# Gentoo-upgrade-script
+# gentoo-upgrade
 Script for upgrading Gentoo Linux
