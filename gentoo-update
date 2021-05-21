@@ -1,4 +1,33 @@
 #!/usr/bin/env bash
+#    Gentoo system upgrade script, upgrades gentoo by syncing the portage tree,
+#    upgrades any layman repositories, cleans up after any prior emerge history,
+#    updates portage and does a complete system upgrade, then it runs a depclean
+#    and rebuilds any dependencies if needed, then rebuilds stale libraries and
+#    kernel modules! I use this script to upgrade my daily Gentoo system, if anything
+#    goes wrong feel free to contact me, or open a GitHub issue!
+#
+#    Copyright (c) 2020-2021 quarkyalice (devfusediboot@protonmail.com)
+#    
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+source /etc/gentoo-update.conf
+
+# Check for root
+if [ "$EUID" -ne 0 ]
+    then echo "Please run as root"
+    exit 1
+fi
+
 echo "Upgrading Gentoo..."
 echo "Syncing portage..."
 eix-sync
@@ -13,11 +42,16 @@ echo "Updating portage..."
 emerge --oneshot --update portage
 echo
 echo "Running a complete system upgrade..."
+echo "This process could fail and require manual intervention!"
+echo "Running emerge --deep --with-bdeps=y --changed-use --update @world"
 START=`date`
 emerge --deep --with-bdeps=y --changed-use --update @world
 STOP=`date`
 echo "Start : "$START
 echo "End   : "$STOP
+echo "Sleeping for a few seconds so you can read any messages and correct any problems if this part failed"
+echo "Press ctrl+c if failed and correct problems, then run script again"
+sleep 5
 echo
 echo "Cleaning up dependencies..."
 emerge --depclean
@@ -28,24 +62,45 @@ echo
 echo "Rebuilding any packages that depend on stale libraries..."
 emerge @preserved-rebuild
 echo
-echo "Rebuilding any external kernel modules (example virtualbox or vmware)"
-emerge @module-rebuild --exclude '*-bin'
-echo
 echo "Updating environmental settings"
 env-update
 echo
+
+# Eventually this may be it 's own script altogether, pulled in as a dependency but for now it's a part of this script.
+if [[ $kernel_build == YES ]]; then
+    echo "Upgrading kernel..."
+    if [[ $(findmnt -M "$FOLDER") ]]; then
+        echo "/boot is mounted! continuing"
+    else
+        echo "Mounting /boot!"
+        mount /boot
+    fi
+    
+    if [[ $use_running_config == YES ]]; then
+        # Building kernel with config in /proc/config.gz
+        genkernel --kernel-config=/proc/config.gz all
+    else
+        genkernel all
+    fi
+else
+    echo "Skipping kernel build..."
+fi
+echo "Rebuilding any external kernel modules (example virtualbox or vmware)"
+emerge @module-rebuild --exclude '*-bin'
+echo
+
+# Prompt asking if you want to reboot the computer
 echo "Upgrade completed"
 read -r -p "Reboot? [Y/n] " input
- 
 case $input in
-    [yY][eE][sS]|[yY])
- echo "Rebooting"
- reboot
- ;;
-    [nN][oO]|[nN])
-       ;;
+        [yY][eE][sS]|[yY])
+    echo "Rebooting"
+    reboot
+    ;;
+        [nN][oO]|[nN])
+    ;;
     *)
- echo "Invalid input..."
- exit 1
- ;;
+    echo "Invalid input..."
+    exit 1
+    ;;
 esac
