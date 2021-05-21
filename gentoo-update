@@ -20,87 +20,131 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-source /etc/gentoo-update.conf
+CONFIG_FILE="/etc/gentoo-update.conf"
+source $CONFIG_FILE
 
-# Check for root
-if [ "$EUID" -ne 0 ]
-    then echo "Please run as root"
-    exit 1
-fi
-
-echo "Upgrading Gentoo..."
-echo "Syncing portage..."
-eix-sync
-echo
-echo "Updating layman repos..."
-layman -S
-echo
-echo "Cleaning any prior emerge resume history"
-emaint --fix cleanresume
-echo
-echo "Updating portage..."
-emerge --oneshot --update portage
-echo
-echo "Running a complete system upgrade..."
-echo "This process could fail and require manual intervention!"
-echo "Running emerge --deep --with-bdeps=y --changed-use --update @world"
-START=`date`
-emerge --deep --with-bdeps=y --changed-use --update @world
-STOP=`date`
-echo "Start : "$START
-echo "End   : "$STOP
-echo "Sleeping for a few seconds so you can read any messages and correct any problems if this part failed"
-echo "Press ctrl+c if failed and correct problems, then run script again"
-sleep 5
-echo
-echo "Cleaning up dependencies..."
-emerge --depclean
-echo
-echo "Checking and rebuilding dependencies..."
-revdep-rebuild
-echo
-echo "Rebuilding any packages that depend on stale libraries..."
-emerge @preserved-rebuild
-echo
-echo "Updating environmental settings"
-env-update
-echo
-
-# Eventually this may be it 's own script altogether, pulled in as a dependency but for now it's a part of this script.
-if [[ $kernel_build == YES ]]; then
-    echo "Upgrading kernel..."
-    if [[ $(findmnt -M "$FOLDER") ]]; then
-        echo "/boot is mounted! continuing"
-    else
-        echo "Mounting /boot!"
-        mount /boot
+check_for_root() {
+    # Check for root
+    if [ "$EUID" -ne 0 ]
+        then echo "Please run as root"
+        exit 1
     fi
+}
+
+sync_portage_tree() {
+    if [[ $SKIP_SYNC="YES" ]]; then
+        echo "Skipping sync..."
+    else
+        echo "Upgrading portage tree with webrsync before doing a sync..."
+        emerge-webrsync
+        echo "Syncing portage..."
+        eix-sync
+        echo
+    fi
+}
+
+update_layman_repos() {
+    echo "Updating layman repos..."
+    layman -S
+    echo
+}
+
+clean_prior_history() {
+    echo "Cleaning any prior emerge resume history"
+    emaint --fix cleanresume
+    echo
+}
+
+update_portage() {
+    echo "Updating portage..."
+    emerge --oneshot --update portage
+    echo
+}
+
+do_the_complete_system_upgrade() {
+    echo "Running a complete system upgrade..."
+    echo "This process could fail and require manual intervention!"
+    echo "Running emerge --deep --with-bdeps=y --changed-use --update @world"
+    START=`date`
+    emerge --deep --with-bdeps=y --changed-use --update @world
+    STOP=`date`
+    echo "Start : "$START
+    echo "End   : "$STOP
+    echo "Sleeping for a few seconds so you can read any messages and correct any problems if this part failed"
+    echo "Press ctrl+c if failed and correct problems, then run script again"
+    sleep 5
+    echo
+}
+
+process_dependencies() {
+    echo "Cleaning up dependencies..."
+    emerge --depclean
+    echo
+    echo "Checking and rebuilding dependencies..."
+    revdep-rebuild
+    echo
+    echo "Rebuilding any packages that depend on stale libraries..."
+    emerge @preserved-rebuild
+    echo
+    echo "Updating environmental settings"
+    env-update
+    echo
+}
+
+build_kernel() {
+    # Eventually this may be it 's own script altogether, pulled in as a dependency but for now it's a part of this script.
+    if [[ $kernel_build == YES ]]; then
+        echo "Upgrading kernel..."
+        if [[ $(findmnt -M "$FOLDER") ]]; then
+            echo "/boot is mounted! continuing"
+        else
+            echo "Mounting /boot!"
+            mount /boot
+        fi
     
-    if [[ $use_running_config == YES ]]; then
-        # Building kernel with config in /proc/config.gz
-        genkernel --kernel-config=/proc/config.gz all
+        if [[ $use_running_config == YES ]]; then
+            # Building kernel with config in /proc/config.gz
+            genkernel --kernel-config=/proc/config.gz all
+        else
+            genkernel all
+        fi
     else
-        genkernel all
+        echo "Skipping kernel build..."
     fi
-else
-    echo "Skipping kernel build..."
-fi
-echo "Rebuilding any external kernel modules (example virtualbox or vmware)"
-emerge @module-rebuild --exclude '*-bin'
-echo
+}
 
-# Prompt asking if you want to reboot the computer
-echo "Upgrade completed"
-read -r -p "Reboot? [Y/n] " input
-case $input in
-        [yY][eE][sS]|[yY])
-    echo "Rebooting"
-    reboot
-    ;;
-        [nN][oO]|[nN])
-    ;;
-    *)
-    echo "Invalid input..."
-    exit 1
-    ;;
-esac
+rebuild_modules() {
+    echo "Rebuilding any external kernel modules (example virtualbox or vmware)"
+    emerge @module-rebuild --exclude '*-bin'
+    echo
+}
+
+reboot() {
+    # Prompt asking if you want to reboot the computer
+    echo "Upgrade completed"
+    read -r -p "Reboot? [Y/n] " input
+    case $input in
+            [yY][eE][sS]|[yY])
+        echo "Rebooting"
+        reboot
+        ;;
+            [nN][oO]|[nN])
+        ;;
+        *)
+        echo "Invalid input..."
+        exit 1
+        ;;
+    esac
+}
+
+# Do the script
+check_for_root
+sync_portage_tree
+update_layman_repos
+clean_prior_history
+update_portage
+do_the_complete_system_upgrade
+process_dependencies
+build_kernel
+rebuild_modules
+reboot
