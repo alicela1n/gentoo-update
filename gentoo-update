@@ -36,7 +36,7 @@ reset="\e[0m"
 check_for_root() {
     # Check for root
     if [ "$EUID" -ne 0 ]
-        then echo "Please run as root"
+        then echo -e "${red}Please run as root${reset}"
         exit 1
     fi
 }
@@ -135,7 +135,7 @@ build_kernel() {
         if [[ $(findmnt -M "$FOLDER") ]]; then
             echo -e "${green}/boot is mounted! continuing${reset}"
         else
-            echo "${green}Mounting /boot!${reset}"
+            echo -e "${green}Mounting /boot!${reset}"
             mount /boot
         fi
     
