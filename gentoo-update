@@ -23,6 +23,16 @@
 CONFIG_FILE="/etc/gentoo-update.conf"
 source $CONFIG_FILE
 
+# Color variables
+red="\e[0;91m"
+blue="\e[0;94m"
+green="\e[0;92m"
+white="\e[0;97m"
+bold="\e[1m"
+uline="\e[4m"
+reset="\e[0m"
+
+
 check_for_root() {
     # Check for root
     if [ "$EUID" -ne 0 ]
@@ -33,95 +43,112 @@ check_for_root() {
 
 sync_portage_tree() {
     if [[ "$SKIP_SYNC" == "YES" ]]; then
-        echo "Skipping sync..."
+        echo -e "${red}Skipping sync...${reset}"
     else
-        echo "Upgrading portage tree with webrsync before doing a sync..."
+        echo -e "${green}Upgrading portage tree with webrsync before doing a sync...${reset}"
         emerge-webrsync
-        echo "Syncing portage..."
+        echo -e "${green}Syncing portage...${reset}"
         eix-sync
         echo
     fi
 }
 
 update_layman_repos() {
-    echo "Updating layman repos..."
+    echo -e "${green}Updating layman repos...${reset}"
     layman -S
     echo
 }
 
 clean_prior_history() {
-    echo "Cleaning any prior emerge resume history"
+    echo -e "${green}Cleaning any prior emerge resume history${reset}"
     emaint --fix cleanresume
     echo
 }
 
 update_portage() {
-    echo "Updating portage..."
+    echo -e "${green}Updating portage...${reset}"
     emerge --oneshot --update portage
     echo
 }
 
 do_the_complete_system_upgrade() {
-    echo "Running a complete system upgrade..."
-    echo "This process could fail and require manual intervention!"
-    echo "Running emerge --deep --with-bdeps=y --changed-use --update @world"
+    echo -e "${green}Running a complete system upgrade...${reset}"
+    echo -e "${red}This process could fail and require manual intervention!${reset}"
+    echo -e "${blue}Running emerge --deep --with-bdeps=y --changed-use --update @world${reset}"
     START=`date`
     emerge --deep --with-bdeps=y --changed-use --update @world
     STOP=`date`
-    echo "Start : "$START
-    echo "End   : "$STOP
-    echo "Sleeping for a few seconds so you can read any messages and correct any problems if this part failed"
-    echo "Press ctrl+c if failed and correct problems, then run script again"
+    echo -e "${blue}Start : ${reset}"$START
+    echo -e "${blue}End   : ${reset}"$STOP
+    echo -e "${red}Sleeping for a few seconds so you can read any messages and correct any problems if this part failed${reset}"
+    echo -e "${red}Press ctrl+c if failed and correct problems, then run script again${reset}"
     sleep 5
     echo
 }
 
 process_dependencies() {
-    echo "Cleaning up dependencies..."
+    echo -e "${green}Cleaning up dependencies...${reset}"
     emerge --depclean
     echo
-    echo "Checking and rebuilding dependencies..."
+    echo -e "${green}Checking and rebuilding dependencies...${reset}"
     revdep-rebuild
     echo
-    echo "Rebuilding any packages that depend on stale libraries..."
+    echo -e "${green}Rebuilding any packages that depend on stale libraries...${reset}"
     emerge @preserved-rebuild
     echo
-    echo "Updating environmental settings"
+    echo -e "${green}Updating environmental settings${reset}"
     env-update
     echo
+}
+
+update_old_perl_modules() {
+    # perl modules need to be updated as they are built for a particular perl target but not automatically
+    # rebuilt when perl gets upgraded
+    if [[ "$NO_PERL_REBUILD" == "YES" ]]; then
+        echo -e "${red}Skipping Perl module rebuild...${reset}"
+    else
+        echo -e "${green}Rebuilding old perl modules...${reset}"
+        perl-cleaner --all
+    fi
+}
+
+clean_python_config() {
+    # Remove uninstalled versions of python from /etc/python-exec/python-exec.conf
+    eselect python cleanup
 }
 
 build_kernel() {
     # Eventually this may be it 's own script altogether, pulled in as a dependency but for now it's a part of this script.
     if [[ $kernel_build == YES ]]; then
-        echo "Upgrading kernel..."
+        echo -e "${green}Upgrading kernel...${reset}"
         if [[ $(findmnt -M "$FOLDER") ]]; then
-            echo "/boot is mounted! continuing"
+            echo -e "${green}/boot is mounted! continuing${reset}"
         else
-            echo "Mounting /boot!"
+            echo "${green}Mounting /boot!${reset}"
             mount /boot
         fi
     
         if [[ $use_running_config == YES ]]; then
             # Building kernel with config in /proc/config.gz
+            echo -e "${green}Using current running config in /proc/config.gz...${reset}"
             genkernel --kernel-config=/proc/config.gz all
         else
             genkernel all
         fi
     else
-        echo "Skipping kernel build..."
+        echo -e "${red}Skipping kernel build...${reset}"
     fi
 }
 
 rebuild_modules() {
-    echo "Rebuilding any external kernel modules (example virtualbox or vmware)"
+    echo -e "${green}Rebuilding any external kernel modules (example virtualbox or vmware)${reset}"
     emerge @module-rebuild --exclude '*-bin'
     echo
 }
 
 reboot() {
     # Prompt asking if you want to reboot the computer
-    echo "Upgrade completed"
+    echo -e "${green}Upgrade completed${reset}"
     read -r -p "Reboot? [Y/n] " input
     case $input in
             [yY][eE][sS]|[yY])
@@ -131,7 +158,7 @@ reboot() {
             [nN][oO]|[nN])
         ;;
         *)
-        echo "Invalid input..."
+        echo -e "${red}Invalid input...${reset}"
         exit 1
         ;;
     esac
@@ -145,6 +172,8 @@ clean_prior_history
 update_portage
 do_the_complete_system_upgrade
 process_dependencies
+update_old_perl_modules
+clean_python_config
 build_kernel
 rebuild_modules
 reboot
