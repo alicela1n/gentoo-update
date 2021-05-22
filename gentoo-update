@@ -75,14 +75,25 @@ do_the_complete_system_upgrade() {
     echo -e "${green}Running a complete system upgrade...${reset}"
     echo -e "${red}This process could fail and require manual intervention!${reset}"
     echo -e "${blue}Running emerge --deep --with-bdeps=y --changed-use --update @world${reset}"
+    
+    # Check if user changes are required to percede
+    if grep -qi "The following \(keyword\|mask\|USE\|license\) changes are necessary to proceed" \
+        <(emerge --pretend --deep --with-bdeps=y --changed-use --update --backtrack=50 @world 2>&1 || true); then
+        # Silently note this and fail later
+        USER_CHANGES_REQUIRED="YES"
+    fi
+    
+    # Actually do the system upgrade
     START=`date`
     emerge --deep --with-bdeps=y --changed-use --update @world
     STOP=`date`
-    echo -e "${blue}Start : ${reset}"$START
-    echo -e "${blue}End   : ${reset}"$STOP
-    echo -e "${red}Sleeping for a few seconds so you can read any messages and correct any problems if this part failed${reset}"
-    echo -e "${red}Press ctrl+c if failed and correct problems, then run script again${reset}"
-    sleep 5
+    if [[ "$USER_CHANGES_REQUIRED" == "YES" ]]; then
+        echo -e "${red}User changes are required! Attempt to fix it in another console window then return here${reset}"
+        read -p "Press enter to continue"
+        do_the_complete_system_upgrade
+    fi
+    echo -e "${blue}Start : ${reset}" $START
+    echo -e "${blue}End   : ${reset}" $STOP
     echo
 }
 
