@@ -60,7 +60,7 @@ update_layman_repos() {
 }
 
 clean_prior_history() {
-    echo -e "${green}Cleaning any prior emerge resume history${reset}"
+    echo -e "${green}Cleaning any prior emerge resume history...${reset}"
     emaint --fix cleanresume
     echo
 }
@@ -158,21 +158,24 @@ rebuild_modules() {
 }
 
 reboot() {
-    # Prompt asking if you want to reboot the computer
-    echo -e "${green}Upgrade completed${reset}"
-    read -r -p "Reboot? [Y/n] " input
-    case $input in
-            [yY][eE][sS]|[yY])
-        echo "Rebooting"
-        reboot
-        ;;
-            [nN][oO]|[nN])
-        ;;
-        *)
-        echo -e "${red}Invalid input...${reset}"
-        exit 1
-        ;;
-    esac
+    if [[ $reboot == YES ]]; then
+    else
+        # Prompt asking if you want to reboot the computer
+        echo -e "${green}Upgrade completed${reset}"
+        read -r -p "Reboot? [Y/n] " input
+        case $input in
+                [yY][eE][sS]|[yY])
+            echo "Rebooting"
+            reboot
+            ;;
+                [nN][oO]|[nN])
+            ;;
+            *)
+            echo -e "${red}Invalid input...${reset}"
+            exit 1
+            ;;
+        esac
+    fi
 }
 
 # Do the script
