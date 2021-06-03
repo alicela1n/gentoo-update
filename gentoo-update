@@ -159,6 +159,7 @@ rebuild_modules() {
 
 reboot() {
     if [[ $reboot == YES ]]; then
+        echo -e "${green}Upgrade completed${reset}"
     else
         # Prompt asking if you want to reboot the computer
         echo -e "${green}Upgrade completed${reset}"
