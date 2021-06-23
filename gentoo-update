@@ -32,7 +32,6 @@ bold="\e[1m"
 uline="\e[4m"
 reset="\e[0m"
 
-
 check_for_root() {
     # Check for root
     if [ "$EUID" -ne 0 ]
@@ -54,9 +53,11 @@ sync_portage_tree() {
 }
 
 update_layman_repos() {
-    echo -e "${green}Updating layman repos...${reset}"
-    layman -S
-    echo
+    if [ -f /usr/bin/layman ]; then
+        echo -e "${green}Updating layman repos...${reset}"
+        layman -S
+        echo
+    fi
 }
 
 clean_prior_history() {
