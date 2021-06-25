@@ -20,8 +20,13 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-CONFIG_FILE="/etc/gentoo-update.conf"
-source $CONFIG_FILE
+
+# === Variables ===
+PROGNAME="$(basename "${0}")"
+VERSION="1.3" # If you're using 9999 this will be whatever the next version of the script is
+CONFIG_FILE="/etc/gentoo-update.conf" # Configuration file
+SCRIPTPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")" # Store canonical path of script
+ARGS="${@}" # Store copy of command line arguments
 
 # Color variables
 red="\e[0;91m"
@@ -31,21 +36,42 @@ white="\e[0;97m"
 bold="\e[1m"
 uline="\e[4m"
 reset="\e[0m"
+# === End of Variables ===
+
+# === Prerun tasks ===
+source $CONFIG_FILE # Source the configuration file
+# === End of Prerun tasks ===
 
 check_for_root() {
-    # Check for root
+    # Check for root by checking the UID of the running user
     if [ "$EUID" -ne 0 ]
         then echo -e "${red}Please run as root${reset}"
         exit 1
     fi
 }
 
+restart() {
+    exec "${SCRIPTPATH}" ${ARGS}
+}
+
+error() {
+    echo -e "${red}Error: exiting${reset}" >&2
+    exit 1
+}
+
+successful_quit() {
+    exit 0
+}
+
 sync_portage_tree() {
-    if [[ "$SKIP_SYNC" == "YES" ]]; then
+    # Sync the portage tree, using webrsync and eix-sync
+    if [[ "$SKIP_SYNC_TREE" == "1" ]]; then
         echo -e "${red}Skipping sync...${reset}"
     else
+        # Using emerge-webrsync to bring portage tree up to a recent snapshot
         echo -e "${green}Upgrading portage tree with webrsync before doing a sync...${reset}"
         emerge-webrsync
+        # Using emerge --sync to bring the portage tree up to the very latest snapshot
         echo -e "${green}Syncing portage...${reset}"
         eix-sync
         echo
@@ -53,7 +79,10 @@ sync_portage_tree() {
 }
 
 update_layman_repos() {
-    if [ -f /usr/bin/layman ]; then
+    # Layman is obsolete, so it's not recommended to use it, however I'll leave this for the people still using it
+    if [[ "$SKIP_LAYMAN_SYNC" == "1" ]]; then
+        echo -e "${red}Skipping layman sync...${reset}"
+    elif [ -f /usr/bin/layman ]; then
         echo -e "${green}Updating layman repos...${reset}"
         layman -S
         echo
@@ -61,15 +90,33 @@ update_layman_repos() {
 }
 
 clean_prior_history() {
-    echo -e "${green}Cleaning any prior emerge resume history...${reset}"
-    emaint --fix cleanresume
-    echo
+    if [[ "$SKIP_CLEAN_HISTORY" == "YES" ]]; then
+        echo -e "${red}Skipping cleaning any prior emerge resume history...${reset}"
+    else
+        echo -e "${green}Cleaning any prior emerge resume history...${reset}"
+        emaint --fix cleanresume
+        echo
+    fi
 }
 
 update_portage() {
-    echo -e "${green}Updating portage...${reset}"
-    emerge --oneshot --update portage
-    echo
+    if [[ "$SKIP_PORTAGE_UPDATE" == "1" ]]; then
+        echo -e "${red}Skipping portage update...${reset}"
+    else
+        echo -e "${green}Updating portage...${reset}"
+        emerge --oneshot --update portage
+        echo
+    fi
+}
+
+update_gentoo_update() {
+    echo -e "${green}Ensuring ${PROGNAME} is up to date...${reset}"
+    emerge --oneshot --update app-portage/gentoo-update
+    # If gentoo-update version changed, restart
+    if [[ $("${SCRIPTPATH}" -v) != "${VERSION}" ]]; then
+        echo "${red}${PROGNAME} has changed, restarting...${reset}"
+        restart
+    fi
 }
 
 do_the_complete_system_upgrade() {
@@ -80,7 +127,7 @@ do_the_complete_system_upgrade() {
     # Check if user changes are required to percede
     if grep -qi "The following \(keyword\|mask\|USE\|license\) changes are necessary to proceed" \
         <(emerge --pretend --deep --with-bdeps=y --changed-use --update --backtrack=50 @world 2>&1 || true); then
-        # Silently note this and fail later
+        # Silently note this and fail later# if the above caused the version of genup to change, exec ourselves
         USER_CHANGES_REQUIRED="YES"
     fi
     
@@ -158,8 +205,13 @@ rebuild_modules() {
     echo
 }
 
+env_update() {
+    # Update the environment
+    env-update
+}
+
 reboot() {
-    echo -e "${green}Upgrade completed${reset}"
+    echo -e "${green}Upgrade completed!${reset}"
     if [[ $reboot == YES ]]; then
         # Prompt asking if you want to reboot the computer
         read -r -p "Reboot? [Y/n] " input
@@ -178,16 +230,69 @@ reboot() {
     fi
 }
 
-# Do the script
+usage() {
+    cat << EOF
+USAGE: ${PROGNAME} [options]
+
+Options:
+    -s, --skip-sync         Skip the portage tree sync
+    -l, --layman-skip-sync  Skip layman sync, if you have layman installed, otherwise this is useless
+    -p, --skip-portage      Skip portage upgrade before upgrading world (bad idea unless you know what you're doing)
+    -v, --version           Script version number
+    -h, --help              Usage prompt
+EOF
+}
+
+version() {
+    echo "${VERSION}"
+}
+
+process_command_line_arguments() {
+    local TEMP
+    declare -i RC
+    set +e
+        TEMP="$(getopt -n "${PROGNAME}" -o vslph --long version,skip-sync,layman-skip-sync,skip-portage,help: -- "${@}")"
+        RC="${?}"
+    set -e
+    if ((RC!=0)); then
+        error
+    fi
+    eval set -- "${TEMP}"
+
+    while true; do
+        case "${1}" in
+            -v|--version) PRINT_VERSION=1; shift ;;
+            -s|--skip-sync) SKIP_SYNC_TREE=1; shift ;;
+            -l|--layman-skip-sync) SKIP_LAYMAN_SYNC=1; shift ;;
+            -p|--skip-portage) SKIP_PORTAGE_UPDATE=1; shift ;;
+            -h|--help) USAGE=1; shift ;;
+            --) shift; break ;;
+            *) error "Internal error!" ;;
+        esac
+    done
+
+    if [[ $USAGE == 1 ]]; then
+        usage; successful_quit
+    elif [[ $PRINT_VERSION == 1 ]]; then
+        version; successful_quit
+    fi
+}
+
+# === Do the script ===
+process_command_line_arguments "${@}"
 check_for_root
 sync_portage_tree
 update_layman_repos
 clean_prior_history
 update_portage
+update_gentoo_update
 do_the_complete_system_upgrade
 process_dependencies
 update_old_perl_modules
 clean_python_config
 build_kernel
 rebuild_modules
+env_update
 reboot
+successful_quit
+# === End of script ===
