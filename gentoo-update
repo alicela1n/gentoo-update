@@ -39,14 +39,20 @@ reset="\e[0m"
 # === End of Variables ===
 
 # === Prerun tasks ===
-source $CONFIG_FILE # Source the configuration file
-# === End of Prerun tasks ===
-
-check_for_root() {
+prerun_checks() {
     # Check for root by checking the UID of the running user
-    if [ "$EUID" -ne 0 ]
-        then echo -e "${red}Please run as root${reset}"
-        exit 1
+    if [ "$EUID" -ne 0 ]; then 
+        echo -e "${red}Please run as root${reset}"
+        error
+    # Check if the config file exists
+    elif [[ ! -f ${CONFIG_FILE} ]]; then
+        echo -e "${red}No config file found!${reset}"
+        echo -e "${red}Using defaults!${reset}"
+        kernel_build="NO"
+        use_running_config="NO"
+        reboot="YES"
+    else
+        source $CONFIG_FILE
     fi
 }
 
@@ -280,7 +286,7 @@ process_command_line_arguments() {
 
 # === Do the script ===
 process_command_line_arguments "${@}"
-check_for_root
+prerun_checks
 sync_portage_tree
 update_layman_repos
 clean_prior_history
