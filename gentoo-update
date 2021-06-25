@@ -55,6 +55,7 @@ prerun_checks() {
         source $CONFIG_FILE
     fi
 }
+# === End of prerun tasks ===
 
 restart() {
     exec "${SCRIPTPATH}" ${ARGS}
