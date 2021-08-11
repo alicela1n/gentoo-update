@@ -74,6 +74,9 @@ sync_portage_tree() {
     # Sync the portage tree, using webrsync and eix-sync
     if [[ "$SKIP_SYNC_TREE" == "1" ]]; then
         echo -e "${red}Skipping sync...${reset}"
+    elif [[ "$WEBRSYNC" == "1" ]]; then
+        echo -e "${green}Running emerge-webrsync...${reset}"
+        emerge-webrsync
     else
         # Using emerge-webrsync to bring portage tree up to a recent snapshot
         echo -e "${green}Upgrading portage tree with webrsync before doing a sync...${reset}"
@@ -187,7 +190,7 @@ clean_python_config() {
 
 build_kernel() {
     # Eventually this may be it 's own script altogether, pulled in as a dependency but for now it's a part of this script.
-    if [[ $kernel_build == YES ]]; then
+    if [[ "$kernel_build" == "YES" ]]; then
         echo -e "${green}Upgrading kernel...${reset}"
         if [[ $(findmnt -M "$FOLDER") ]]; then
             echo -e "${green}/boot is mounted! continuing${reset}"
@@ -245,6 +248,7 @@ USAGE: ${PROGNAME} [options]
 
 Options:
     -s, --skip-sync         Skip the portage tree sync
+    -r, --webrsync          Webrsync only, but don't emerge --sync
     -l, --layman-skip-sync  Skip layman sync, if you have layman installed, otherwise this is useless
     -p, --skip-portage      Skip portage upgrade before upgrading world (bad idea unless you know what you're doing)
     -v, --version           Script version number
@@ -260,7 +264,7 @@ process_command_line_arguments() {
     local TEMP
     declare -i RC
     set +e
-        TEMP="$(getopt -n "${PROGNAME}" -o vslph --long version,skip-sync,layman-skip-sync,skip-portage,help: -- "${@}")"
+        TEMP="$(getopt -n "${PROGNAME}" -o vsrlph --long version,skip-sync,webrsync,layman-skip-sync,skip-portage,help: -- "${@}")"
         RC="${?}"
     set -e
     if ((RC!=0)); then
@@ -272,6 +276,7 @@ process_command_line_arguments() {
         case "${1}" in
             -v|--version) PRINT_VERSION=1; shift ;;
             -s|--skip-sync) SKIP_SYNC_TREE=1; shift ;;
+            -r|--webrsync) WEBRSYNC=1; shift ;;
             -l|--layman-skip-sync) SKIP_LAYMAN_SYNC=1; shift ;;
             -p|--skip-portage) SKIP_PORTAGE_UPDATE=1; shift ;;
             -h|--help) USAGE=1; shift ;;
