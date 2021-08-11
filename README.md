@@ -25,7 +25,7 @@ Install
 # gentoo-update
 ```
 
-**It's recommended to update the script before running it, I haven't yet added self updating (with portage) to the script but will soon**
+**It's recommended to update the script before running it if using 9999**
 ```
 # emaint sync -r alicela1ns-overlay
 # emerge --update gentoo-update
