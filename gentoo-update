@@ -212,8 +212,6 @@ build_kernel() {
         else
             genkernel all
         fi
-    else
-        echo -e "${red}Skipping kernel build...${reset}"
     fi
 }
 
