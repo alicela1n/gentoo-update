@@ -38,6 +38,12 @@ uline="\e[4m"
 reset="\e[0m"
 # === End of Variables ===
 
+# force TERM if none found (e.g. when running from cron)
+# otherwise mach builds (firefox etc.) will fail
+if ! tty -s; then
+    export TERM="dumb"
+fi
+
 # === Prerun tasks ===
 prerun_checks() {
     # Check for root by checking the UID of the running user
@@ -100,7 +106,7 @@ update_layman_repos() {
 }
 
 clean_prior_history() {
-    if [[ "$SKIP_CLEAN_HISTORY" == "YES" ]]; then
+    if [[ "$SKIP_CLEAN_HISTORY" == "1" ]]; then
         echo -e "${red}Skipping cleaning any prior emerge resume history...${reset}"
     else
         echo -e "${green}Cleaning any prior emerge resume history...${reset}"
@@ -137,7 +143,7 @@ do_the_complete_system_upgrade() {
     # Check if user changes are required to percede
     if grep -qi "The following \(keyword\|mask\|USE\|license\) changes are necessary to proceed" \
         <(emerge --pretend --deep --with-bdeps=y --changed-use --update --backtrack=50 @world 2>&1 || true); then
-        # Silently note this and fail later# if the above caused the version of genup to change, exec ourselves
+        # Silently note this and fail later
         USER_CHANGES_REQUIRED="YES"
     fi
     
@@ -230,7 +236,7 @@ reboot() {
         case $input in
                 [yY][eE][sS]|[yY])
             echo "Rebooting"
-           reboot
+            reboot
             ;;
                 [nN][oO]|[nN])
             ;;
@@ -253,6 +259,8 @@ Options:
     -p, --skip-portage      Skip portage upgrade before upgrading world (bad idea unless you know what you're doing)
     -v, --version           Script version number
     -h, --help              Usage prompt
+    -m, --module-rebuild    Rebuild kernel modules and do nothing else
+    -k, --kernel-rebuild    Rebuild kernel, override config
 EOF
 }
 
@@ -264,7 +272,7 @@ process_command_line_arguments() {
     local TEMP
     declare -i RC
     set +e
-        TEMP="$(getopt -n "${PROGNAME}" -o vsrlph --long version,skip-sync,webrsync,layman-skip-sync,skip-portage,help: -- "${@}")"
+        TEMP="$(getopt -n "${PROGNAME}" -o vsrlphmk --long version,skip-sync,webrsync,layman-skip-sync,skip-portage,help,module-rebuild,kernel-rebuild: -- "${@}")"
         RC="${?}"
     set -e
     if ((RC!=0)); then
@@ -280,6 +288,8 @@ process_command_line_arguments() {
             -l|--layman-skip-sync) SKIP_LAYMAN_SYNC=1; shift ;;
             -p|--skip-portage) SKIP_PORTAGE_UPDATE=1; shift ;;
             -h|--help) USAGE=1; shift ;;
+            -m|--module-rebuild) MOD_REBUILD=1; shift ;;
+            -k|--kernel-rebuild) kernel_build=YES; shift ;;
             --) shift; break ;;
             *) error "Internal error!" ;;
         esac
@@ -289,12 +299,14 @@ process_command_line_arguments() {
         usage; successful_quit
     elif [[ $PRINT_VERSION == 1 ]]; then
         version; successful_quit
+    elif [[ $MOD_REBUILD == 1 ]]; then
+        rebuild_modules; successful_quit
     fi
 }
 
 # === Do the script ===
-process_command_line_arguments "${@}"
 prerun_checks
+process_command_line_arguments "${@}"
 sync_portage_tree
 update_layman_repos
 clean_prior_history
